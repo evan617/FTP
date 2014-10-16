@@ -6,20 +6,19 @@ import getpass
 
 host = '127.0.0.1'
 port = 6679
-BUFFERSIZE = 4096
 s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
 s.connect((host,port))
 
 while 1:
     name = raw_input('UserName:').strip()
     s.sendall(name)
-    name_res = s.recv(BUFFERSIZE)
+    name_res = s.recv(1024)
     if name_res != 'OK':
         print '\033[31minvalid UserName\033[0m'
         continue
     passwd = getpass.getpass()
     s.sendall(passwd)
-    pass_res = s.recv(BUFFERSIZE)
+    pass_res = s.recv(1024)
     if pass_res != 'OK':
         print '\033[31mPassword Wrong\033[0m'
         continue
@@ -29,44 +28,28 @@ print '\033[32mwelcome to ftp server, %s\033[0m' % name
 
 while 1:
     cmd = raw_input('ftp >').strip()
+    s.sendall(cmd)
     if not cmd:
         continue
     elif cmd == 'q':
-        s.sendall(cmd)
         break
     elif cmd.split()[0] == 'get':
-        s.sendall(cmd)
-        status = s.recv(BUFFERSIZE)
+        status = s.recv(4096)
         if status == 'file not exists or is a directory' or status == 'Usage: get file_name':
             print status
             continue
+        data = s.recv(4096)
+
         filename = cmd.split()[1]
         fd = file(filename,'wb')
-        while 1:
-            filedata = s.recv(BUFFERSIZE)
-            if not filedata:
-                break
-            fd.write(filedata)
-            if len(filedata) < BUFFERSIZE:
-                break
+        if data != 'empty':
+            fd.write(data)
         fd.close()
     elif cmd.split()[0] == 'send':
         filename = cmd.split()[1]
-        if not filename:
-            print 'Usage: send filename'
-            continue
-        try:
-            fd = file(filename, 'rb')
-        except IOError:
-            print '%s not exists or is a directory' % filename
-            continue
-        else:
-            s.sendall(cmd)
-        while 1:
-            filedata = fd.read(BUFFERSIZE)
-            if not filedata:
-                break
-            s.sendall(filedata)
+        fd = file(filename, 'rb')
+        data = fd.read()
+        s.sendall(data)
         fd.close()
         time.sleep(0.5)
         s.sendall('file_send_done')
@@ -74,11 +57,11 @@ while 1:
         print data
     elif cmd.split()[0] == 'cd':
         path = cmd.split()[1]
-        data = s.recv(BUFFERSIZE)
+        data = s.recv(4096)
         if data != 'OK':
             print data
     else:
-        data = s.recv(BUFFERSIZE)
+        data = s.recv(4096)
         print data
 
 s.close()
