@@ -5,12 +5,15 @@ import socket
 import os
 import SocketServer
 
-host = '0.0.0.0'
-port = 6679
+HOST = '0.0.0.0'
+PORT = 6679
+BUFFERSIZE = 4096
 auth_dic={'ftp':'ftp', 'evan':'evan'}
 
 class MyFTPRequestHandler(SocketServer.StreamRequestHandler):
-    '''ftp server, the default path is at /var/ftp/'''
+    '''ftp server, the default path is at /var/ftp/, make sure that you already
+    have the dir and have the access to it before you start the server'''
+
     def handle(self):
         self.path = '/var/ftp/'
         self.auth()
@@ -19,13 +22,13 @@ class MyFTPRequestHandler(SocketServer.StreamRequestHandler):
 
     def auth(self):
         while True:
-            self.name = self.request.recv(1024)
+            self.name = self.request.recv(BUFFERSIZE)
             if self.name not in auth_dic:
                 self.request.sendall('FAILD')
                 continue
             else:
                 self.request.sendall('OK')
-            self.passwd = self.request.recv(1024)
+            self.passwd = self.request.recv(BUFFERSIZE)
             if self.passwd != auth_dic[self.name]:
                 self.request.sendall('FAILED')
                 continue
@@ -44,17 +47,18 @@ class MyFTPRequestHandler(SocketServer.StreamRequestHandler):
         except IOError:
             self.request.sendall('file not exists or is a directory')
         else:
-            response = fd.read()
-            if not response:
-                 self.request.sendall('empty')
+            while 1:
+                filedata = fd.read(BUFFERSIZE)
+                if not filedata:break
+                self.request.sendall(filedata)
             print 'send %s to server %s' % (filename, self.client_address)
-            self.request.sendall(response)
+
 
     def sendfile(self, filename):
         ##f_name = self.path + filename
         fd = file(filename,'wb')
         while True:
-            data2 = self.request.recv(4096)
+            data2 = self.request.recv(BUFFERSIZE)
             if data2 == 'file_send_done':
                 break
             fd.write(data2)
@@ -72,7 +76,7 @@ class MyFTPRequestHandler(SocketServer.StreamRequestHandler):
 
     def run(self):
         while True:
-            data = self.request.recv(2048).strip()
+            data = self.request.recv(BUFFERSIZE).strip()
             print 'receive from %s : %s' % (self.client_address, data)
             if data == '?' or data == 'help':
                 response = '\033[31;1mls\t\t\tshow the current directory\nget file\t\tget the file from ftp server\nsend file\t\tsend the file to ftp server\033[0m'
@@ -93,7 +97,11 @@ class MyFTPRequestHandler(SocketServer.StreamRequestHandler):
                 response = 'invalid command, see help'
                 self.request.sendall(response)
 
+    def finish(self):
+        return SocketServer.BaseRequestHandler.finish(self)
+
+
 
 if __name__ == '__main__':
-    server = SocketServer.ThreadingTCPServer((host, port), MyFTPRequestHandler)
+    server = SocketServer.ThreadingTCPServer((HOST, PORT), MyFTPRequestHandler)
     server.serve_forever()
